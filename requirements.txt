@@ -1,0 +1,14 @@
+streamlit
+numpy
+pandas
+cryptography
+python-dotenv
+plotly
+hydralit-components
+streamlit-option-menu
+datetime
+pillow
+streamlit-lottie
+extra-streamlit-components
+requests
+pyperclip
