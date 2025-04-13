@@ -1,6 +1,5 @@
 # src/main.py
 
-from turtle import position
 import streamlit as st
 import sys
 from pathlib import Path
@@ -15,7 +14,7 @@ from streamlit.components.v1 import html
 import os
 import hashlib
 import base64
-import pyperclip  # Add this import at the top of your file
+import pyperclip  # Keep this import for clipboard functionality
 
 # File to store user data
 USER_DATA_FILE = "user_data.json"
