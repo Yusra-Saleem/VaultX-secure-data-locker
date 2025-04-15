@@ -1,5 +1,3 @@
-# src/main.py
-
 import streamlit as st
 import sys
 from pathlib import Path
@@ -14,7 +12,10 @@ from streamlit.components.v1 import html
 import os
 import hashlib
 import base64
-import pyperclip  # Keep this import for clipboard functionality
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.fernet import Fernet
+
 
 # File to store user data
 USER_DATA_FILE = "user_data.json"
@@ -1069,6 +1070,65 @@ def setup_styling():
             border-color: #3B82F6 !important; /* Focus color */
             box-shadow: 0 0 20px rgba(59, 130, 246, 0.5) !important; /* Glow effect */
         }
+
+        /* Updated CSS for Dropdown */
+        .stSelectbox > div > div > div > div {
+            background: rgba(15, 23, 42, 0.95) !important; /* Dark background */
+            color: #E2E8F0 !important; /* Light text color */
+            border: 2px solid rgba(59, 130, 246, 0.5) !important; /* Border color */
+            border-radius: 12px !important;
+            padding: 1rem !important;
+        }
+
+        .stSelectbox > div > div > div > div > div {
+            background: rgba(15, 23, 42, 0.95) !important; /* Dark background for options */
+            color: #E2E8F0 !important; /* Light text color for options */
+        }
+
+        .stSelectbox > div > div > div > div > div:hover {
+            background: rgba(59, 130, 246, 0.3) !important; /* Lighter background on hover */
+        }
+
+        /* Add custom CSS for dropdown styling */
+        .stSelectbox > div > div {
+            background: rgba(15, 23, 42, 0.95) !important; /* Dark background */
+            border: 2px solid rgba(59, 130, 246, 0.5) !important; /* Border color */
+            border-radius: 12px !important;
+        }
+
+        /* Target the dropdown options */
+        .stSelectbox > div > div > div {
+            background: rgba(15, 23, 42, 0.95) !important; /* Dark background for options */
+            color: #E2E8F0 !important; /* Light text color for options */
+        }
+
+        /* Change the hover state for options */
+        .stSelectbox > div > div > div > div:hover {
+            background: rgba(59, 130, 246, 0.3) !important; /* Lighter background on hover */
+            color: #E2E8F0 !important; /* Ensure text color remains visible on hover */
+        }
+
+        /* Change the selected option background */
+        .stSelectbox > div > div > div > div[aria-selected="true"] {
+            background: rgba(59, 130, 246, 0.5) !important; /* Selected option background */
+            color: #E2E8F0 !important; /* Light text color for selected option */
+        }
+
+        /* Change the background of the selected option in the dropdown */
+        .stSelectbox > div > div > div > div[role="option"][aria-selected="true"] {
+            background: rgba(59, 130, 246, 0.5) !important; /* Selected option background */
+            color: #E2E8F0 !important; /* Light text color for selected option */
+        }
+
+        /* Ensure the dropdown is visible */
+        .stSelectbox > div > div > div > div[role="option"] {
+            display: block !important; /* Ensure options are displayed */
+        }
+
+        /* Ensure the dropdown text is visible */
+        .stSelectbox > div > div > div > div[role="option"] {
+            color: #E2E8F0 !important; /* Ensure text color is visible */
+        }
     """, unsafe_allow_html=True)
 
 def create_section_header(title: str, icon: str):
@@ -1560,10 +1620,6 @@ def show_encrypt_page():
                             if save_encrypted_data(st.session_state.username, encrypted_text, timestamp):
                                 st.success("Data encrypted and saved successfully!")
 
-                                # Copy to clipboard functionality
-                                pyperclip.copy(encrypted_text)  # Copy the encrypted text to clipboard
-                                st.success("Encrypted data copied to clipboard!")  # Notify the user
-
                                 # Show encrypted output
                                 st.markdown(f"""
                                     <div class="encrypted-output">
@@ -1582,55 +1638,106 @@ def show_encrypt_page():
             elif st.session_state.current_page == "Retrieve Data":
                 st.markdown(create_section_header("Retrieve Data", "🔐"), unsafe_allow_html=True)
                 
-                # Create the form for manual decryption
-                with st.form("decrypt_form", clear_on_submit=True):
-                    st.text_area("Enter encrypted data", 
-                        placeholder="Paste your encrypted data here...",
-                        height=150,
-                        key="encrypted_data")
-                    
-                    passkey = st.text_input("Enter passkey", 
-                        type="password",
-                        placeholder="Enter your decryption passkey",
-                        key="decrypt_passkey")
-                    
-                    submitted = st.form_submit_button("🔓 Decrypt")
+                # Create a tab selection for decryption methods
+                decryption_method = st.radio("Select Decryption Method", ("Direct Decryption", "History-Based Decryption"))
 
-                if submitted and st.session_state.encrypted_data and st.session_state.decrypt_passkey:
-                    try:
-                        # Use Fernet decryption
-                        from cryptography.fernet import Fernet
-                        from cryptography.hazmat.primitives import hashes
-                        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-                        import base64
+                if decryption_method == "Direct Decryption":
+                    # Create the form for manual decryption
+                    with st.form("decrypt_form_direct", clear_on_submit=True):
+                        st.text_area("Enter encrypted data", 
+                            placeholder="Paste your encrypted data here...",
+                            height=150,
+                            key="encrypted_data")
                         
-                        # Generate a key from the passkey
-                        kdf = PBKDF2HMAC(
-                            algorithm=hashes.SHA256(),
-                            length=32,
-                            salt=b'vaultx_salt',  # In production, use a random salt
-                            iterations=100000,
-                        )
-                        key = base64.urlsafe_b64encode(kdf.derive(st.session_state.decrypt_passkey.encode()))
-                        f = Fernet(key)
+                        passkey = st.text_input("Enter passkey", 
+                            type="password",
+                            placeholder="Enter your decryption passkey",
+                            key="decrypt_passkey")
                         
-                        # Decrypt the data
-                        decrypted_text = f.decrypt(st.session_state.encrypted_data.encode()).decode()
-                        
-                        # Show decrypted output
-                        st.markdown(f"""
-                            <div class="encrypted-output">
-                                <div class="encrypted-header">
-                                    <span class="encrypted-badge">🔓 Decrypted</span>
+                        submitted = st.form_submit_button("🔓 Decrypt")
+
+                    if submitted and st.session_state.encrypted_data and st.session_state.decrypt_passkey:
+                        try:
+                            # Use Fernet decryption
+                            from cryptography.fernet import Fernet
+                            from cryptography.hazmat.primitives import hashes
+                            from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+                            import base64
+                            
+                            # Generate a key from the passkey
+                            kdf = PBKDF2HMAC(
+                                algorithm=hashes.SHA256(),
+                                length=32,
+                                salt=b'vaultx_salt',  # In production, use a random salt
+                                iterations=100000,
+                            )
+                            key = base64.urlsafe_b64encode(kdf.derive(st.session_state.decrypt_passkey.encode()))
+                            f = Fernet(key)
+                            
+                            # Decrypt the data
+                            decrypted_text = f.decrypt(st.session_state.encrypted_data.encode()).decode()
+                            
+                            # Show decrypted output
+                            st.markdown(f"""
+                                <div class="encrypted-output">
+                                    <div class="encrypted-header">
+                                        <span class="encrypted-badge">🔓 Decrypted</span>
+                                    </div>
+                                    <div class="ciphertext">{decrypted_text}</div>
                                 </div>
-                                <div class="ciphertext">{decrypted_text}</div>
-                            </div>
-                        """, unsafe_allow_html=True)
-                        
-                    except Exception as e:
-                        st.error(f"Decryption failed: {str(e)}")
-                else:
-                    st.warning("Please enter both encrypted data and passkey")
+                            """, unsafe_allow_html=True)
+                            
+                        except Exception as e:
+                            st.error(f"Decryption failed: {str(e)}")
+                    else:
+                        st.warning("Please enter both encrypted data and passkey")
+
+                elif decryption_method == "History-Based Decryption":
+                    user_data = get_user_encrypted_data(st.session_state.username)
+                    
+                    if user_data:
+                        # Create a dropdown for selecting previous entries
+                        options = [f"{entry['timestamp']} - {entry['text'][:10]}..." for entry in user_data]  # Show timestamp and part of the text
+                        selected_entry = st.selectbox("Select an entry from history", options)
+
+                        if selected_entry:
+                            # Extract the encrypted text based on selection
+                            encrypted_text = next((entry['text'] for entry in user_data if f"{entry['timestamp']} - {entry['text'][:10]}..." == selected_entry), None)
+
+                            if encrypted_text:
+                                # Show the selected encrypted text
+                                st.markdown(f"""
+                                    <div class="encrypted-output">
+                                        <div class="encrypted-header">
+                                            <span class="encrypted-badge">🔒 Selected Entry</span>
+                                        </div>
+                                        <div class="ciphertext">{encrypted_text}</div>
+                                    </div>
+                                """, unsafe_allow_html=True)
+
+                                passkey = st.text_input("Enter passkey", type="password", placeholder="Enter your decryption passkey", key="history_decrypt_passkey")
+                                
+                                if st.button("🔓 Decrypt Selected Entry"):
+                                    try:
+                                        # Decrypt the data using the helper function
+                                        decrypted_text = decrypt_history_entry(encrypted_text, passkey)
+                                        
+                                        # Show decrypted output
+                                        st.markdown(f"""
+                                            <div class="encrypted-output">
+                                                <div class="encrypted-header">
+                                                    <span class="encrypted-badge">🔓 Decrypted</span>
+                                                </div>
+                                                <div class="ciphertext">{decrypted_text}</div>
+                                            </div>
+                                        """, unsafe_allow_html=True)
+                                        
+                                    except Exception as e:
+                                        st.error(f"Decryption failed: {str(e)}")
+                            else:
+                                st.error("Selected entry not found.")
+                        else:
+                            st.info("No history available for decryption.")
             
             elif st.session_state.current_page == "Analytics":
                 st.markdown(create_section_header("Analytics", "📈"), unsafe_allow_html=True)
@@ -1695,6 +1802,80 @@ def save_encrypted_data(username: str, encrypted_text: str, timestamp: str):
         save_user_data(user_data)  # Save the updated user data
         return True
     return False
+
+def get_key():
+    if 'fernet_key' not in st.session_state:
+        st.session_state.fernet_key = Fernet.generate_key()
+    return st.session_state.fernet_key
+
+def decrypt_data(encrypted_text, passkey):
+    try:
+        hashed_passkey = hash_passkey(passkey)
+        
+        if st.session_state.lockout_time and datetime.now() < st.session_state.lockout_time:
+            remaining_time = (st.session_state.lockout_time - datetime.now()).seconds
+            st.markdown(f'''
+            <div class="error-box">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:1.5em;">🔒</span>
+                    <div>
+                        <strong>Account locked</strong><br>
+                        Please try again in {remaining_time} seconds
+                    </div>
+                </div>
+            </div>
+            ''', unsafe_allow_html=True)
+            return None
+        
+        for entry_id, entry_data in st.session_state.stored_data.items():
+            if entry_data["encrypted_text"] == encrypted_text and entry_data["passkey"] == hashed_passkey:
+                st.session_state.failed_attempts = 0
+                return cipher.decrypt(encrypted_text.encode()).decode()
+        
+        st.markdown('''
+        <div class="error-box">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:1.5em;">🔐</span>
+                <div>
+                    <strong>Incorrect passkey!</strong><br>
+                    Please check your passkey.
+                </div>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+        
+        return None
+    except Exception as e:
+        st.markdown(f'''
+        <div class="error-box">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:1.5em;">⚠️</span>
+                <div>
+                    <strong>Decryption failed!</strong><br>
+                    The data could not be decrypted. Please check your passkey.
+                </div>
+            </div>
+        </div>
+        ''', unsafe_allow_html=True)
+        return None
+
+def decrypt_history_entry(encrypted_text, passkey):
+    """Helper function to decrypt a history entry"""
+    try:
+        # Generate a key from the passkey
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=b'vaultx_salt',  # In production, use a random salt
+            iterations=100000,
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(passkey.encode()))
+        f = Fernet(key)
+        
+        # Decrypt the data
+        return f.decrypt(encrypted_text.encode()).decode()
+    except Exception as e:
+        raise Exception(f"Decryption failed: {str(e)}")
 
 def main():
     """Main function to run the Streamlit app"""
